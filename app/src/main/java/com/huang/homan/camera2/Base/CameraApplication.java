@@ -1,4 +1,4 @@
-package com.huang.homan.camera2.base;
+package com.huang.homan.camera2.Base;
 
 import android.app.Application;
 
