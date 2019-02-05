@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <SurfaceView
+    <com.huang.homan.camera2.View.common.AutoFitTextureView
         android:id="@+id/mSurfaceView"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -34,10 +34,10 @@
         android:textSize="30sp"
         android:textStyle="bold"
         android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="@id/mSurfaceView"
-        app:layout_constraintEnd_toEndOf="@id/mSurfaceView"
-        app:layout_constraintStart_toStartOf="@id/mSurfaceView"
-        app:layout_constraintTop_toTopOf="@id/mSurfaceView"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.498" />
 
     <ImageView
@@ -48,10 +48,10 @@
         android:layout_marginBottom="20dp"
         android:scaleType="centerCrop"
         android:visibility="invisible"
-        app:layout_constraintBottom_toBottomOf="@id/mSurfaceView"
-        app:layout_constraintEnd_toEndOf="@id/mSurfaceView"
-        app:layout_constraintStart_toStartOf="@id/mSurfaceView"
-        app:layout_constraintTop_toTopOf="@id/mSurfaceView" />
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <ImageView
         android:id="@+id/captureIV"
@@ -59,8 +59,8 @@
         android:layout_height="80dp"
         android:layout_marginStart="8dp"
         android:layout_marginBottom="8dp"
-        app:layout_constraintBottom_toBottomOf="@+id/mSurfaceView"
-        app:layout_constraintStart_toStartOf="@+id/mSurfaceView"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:srcCompat="@mipmap/open_camera" />
     
 </android.support.constraint.ConstraintLayout>

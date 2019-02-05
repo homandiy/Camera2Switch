@@ -3,12 +3,15 @@ package com.huang.homan.camera2.View.Fragment;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.SurfaceTexture;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -18,6 +21,7 @@ import android.widget.Toast;
 import com.huang.homan.camera2.MvpHelper.CameraFragmentVP;
 import com.huang.homan.camera2.Presenter.CameraFragmentPresenter;
 import com.huang.homan.camera2.R;
+import com.huang.homan.camera2.View.common.AutoFitTextureView;
 import com.huang.homan.camera2.View.common.BaseFragment;
 import com.tbruyelle.rxpermissions2.RxPermissions;
 
@@ -55,14 +59,46 @@ public class CameraFragment extends BaseFragment
     }
 
     // UI Variables
-    @BindView(R.id.mSurfaceView)
-    SurfaceView mSurfaceView;
+    //region implements TextureView related
+    @BindView(R.id.mTextureView)
+    AutoFitTextureView mTextureView;
 
-    public SurfaceView getSurfaceView() {
-        if (mSurfaceView == null) { //check null
+    public AutoFitTextureView getTextureView() {
+        if (mTextureView == null) { //check null
             ltag("View object has not created.");
         }
-        return mSurfaceView;
+        return mTextureView;
+    }
+
+    private TextureView.SurfaceTextureListener mTextureListener =
+            new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+            presenter.setupCamera(width, height);
+            presenter.openCamera(rxPermissions);
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+        }
+    };
+    //endregion implements TextureView Related
+
+
+    public AutoFitTextureView getmTextureView() {
+        if (mTextureView == null) { //check null
+            ltag("View object has not created.");
+        }
+        return mTextureView;
     }
 
     @BindView(R.id.infoTV)
@@ -80,7 +116,11 @@ public class CameraFragment extends BaseFragment
 
     @OnClick(R.id.captureIV)
     public void onViewClicked() {
-        presenter.capturePhoto(getRotation());
+        ltag("Capture Button Clicked.");
+
+        presenter.playShutter();
+        presenter.playShutter2();
+        //presenter.capturePhoto(getRotation());
     }
 
     private int getRotation() {
@@ -98,9 +138,6 @@ public class CameraFragment extends BaseFragment
 
     // RxJava: RxPermission
     public RxPermissions rxPermissions;
-    public RxPermissions getRxPermissions() {
-        return rxPermissions;
-    }
 
     private OnFragmentInteractionListener mListener;
 
@@ -126,8 +163,8 @@ public class CameraFragment extends BaseFragment
         rxPermissions.setLogging(true);
         rxPermissions
                 .request(CAMERA,
-                        READ_EXTERNAL_STORAGE,
-                        WRITE_EXTERNAL_STORAGE)
+                         READ_EXTERNAL_STORAGE,
+                         WRITE_EXTERNAL_STORAGE)
                 .subscribe(granted -> {
                     ltag("Permission: " + granted.toString());
                     if (granted) { // Always true pre-M
@@ -148,9 +185,17 @@ public class CameraFragment extends BaseFragment
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_camera, container, false);
         unbinder = ButterKnife.bind(this, view);
-        presenter.setFragment(this);
-        presenter.startCamera(mSurfaceView.getHolder());
         return view;
+    }
+
+    @Override
+    public void onViewCreated(@android.support.annotation.NonNull View view,
+                              @Nullable Bundle savedInstanceState) {
+        super.onViewCreated(view, savedInstanceState);
+
+        mTextureView.setSurfaceTextureListener(mTextureListener);
+
+        presenter.setFragment(this);
     }
 
     @Override
@@ -180,6 +225,7 @@ public class CameraFragment extends BaseFragment
     public void onDetach() {
         super.onDetach();
         mListener = null;
+        presenter.releaseSound();
     }
 
     @Override

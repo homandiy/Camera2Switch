@@ -3,6 +3,7 @@ package com.huang.homan.camera2.Presenter;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraDevice;
@@ -17,6 +18,7 @@ import android.widget.Toast;
 
 import com.huang.homan.camera2.Model.Album;
 import com.huang.homan.camera2.Model.CameraUtil;
+import com.huang.homan.camera2.Model.SoundManager;
 import com.huang.homan.camera2.MvpHelper.BaseActivityVP;
 import com.huang.homan.camera2.MvpHelper.CameraFragmentVP;
 import com.huang.homan.camera2.R;
@@ -52,6 +54,7 @@ public class CameraFragmentPresenter
     private Context fragmentContext;
     private CameraUtil cameraUtil;
     private CameraFragment cameraFragment;
+    SoundManager soundManager;
 
     public CameraFragmentPresenter(CameraActivity cameraActivity) {
         this.cameraActivity = cameraActivity;
@@ -67,11 +70,6 @@ public class CameraFragmentPresenter
         cameraFragment.setCameraFragmentPresenter(this);
         addFragment(cameraFragment);
 
-        //startCamera(cameraFragment.getSurfaceView().getHolder());
-    }
-
-    public void startCamera(SurfaceHolder surfaceHolder) {
-        cameraUtil.startCamera(surfaceHolder);
     }
 
     public void capturePhoto(int rotation) {
@@ -88,10 +86,6 @@ public class CameraFragmentPresenter
 
     public void setImage(Bitmap bitmap) {
         cameraFragment.setPicture(bitmap);
-    }
-
-    public RxPermissions getPermissions() {
-        return cameraFragment.getRxPermissions();
     }
 
     @Override
@@ -151,6 +145,32 @@ public class CameraFragmentPresenter
     @Override
     public void setFragment(CameraFragment cameraFragment) {
         this.cameraFragment = cameraFragment;
+        soundManager = SoundManager.getInstance(getContext());
     }
 
+    public void setupCamera(int width, int height) {
+        cameraUtil.setupCamera(width, height);
+    }
+
+
+    public void openCamera(RxPermissions rxPermissions) {
+        cameraUtil.openCamera(rxPermissions);
+    }
+
+    public SurfaceTexture getSurfaceTexture() {
+        return cameraFragment.getmTextureView().getSurfaceTexture();
+    }
+
+
+    public void playShutter() {
+        soundManager.playShutter();
+    }
+
+    public void playShutter2() {
+        soundManager.playShutter2();
+    }
+
+    public void releaseSound() {
+        soundManager.release();
+    }
 }

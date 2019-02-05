@@ -6,12 +6,14 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.net.Uri;
@@ -22,6 +24,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
+import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -33,7 +36,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 import static android.Manifest.permission.CAMERA;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
@@ -55,107 +62,12 @@ public class CameraUtil {
     private Context context;
     private boolean saveToDisk = false;
 
-    private SurfaceHolder mSurfaceHolder;
-    public void startCamera(SurfaceHolder mSurfaceHolder) {
-        this.mSurfaceHolder = mSurfaceHolder;
-        mSurfaceHolder.setKeepScreenOn(true);
-        // mSurfaceView callback: get data
-        mSurfaceHolder.addCallback(new SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(SurfaceHolder holder) {
-                // Initial Camera2
-                initCamera2();
-            }
-
-            @Override
-            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            }
-
-            @Override
-            public void surfaceDestroyed(SurfaceHolder holder) { // SurfaceView removal
-                // Recycle Camera
-                if (null != mCameraDevice) {
-                    mCameraDevice.close();
-                    mCameraDevice = null;
-                }
-            }
-        });
-    }
-
     // Constructor
     private Album album;
     private CameraFragmentPresenter presenter;
     public CameraUtil(Album album, CameraFragmentPresenter presenter) {
         this.album = album;
         this.presenter = presenter;
-    }
-
-    /**
-     * Initial Camera2
-     */
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    private void initCamera2() {
-        this.context = presenter.getContext();
-
-        HandlerThread handlerThread = new HandlerThread("Camera2");
-        handlerThread.start();
-        childHandler = new Handler(handlerThread.getLooper());
-        // UI thread
-        mainHandler = new Handler(getMainLooper());
-
-        mCameraID = "" + CameraCharacteristics.LENS_FACING_FRONT; // Read camera
-        mImageReader = ImageReader.newInstance(1080, 1920, ImageFormat.JPEG, 1);
-        // Process temporary photo data
-        mImageReader.setOnImageAvailableListener(reader -> {
-            // Get photo data
-            Image image = reader.acquireNextImage();
-            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-            byte[] data = new byte[buffer.remaining()];
-            buffer.get(data);
-
-            ltag("saveToDisk: " + saveToDisk);
-
-            if (saveToDisk) {
-                String captureTime = String.valueOf(System.currentTimeMillis());
-                String pictureName = "SV_" + captureTime + ".jpg";
-                File file = new File(album.getAlbumPath(), pictureName);
-                try {
-                    // Local storage
-                    FileOutputStream fileOutputStream = new FileOutputStream(file);
-                    fileOutputStream.write(data);
-                    fileOutputStream.close();
-                    ltag("Picture created: " + pictureName);
-
-                    // Reset
-                    saveToDisk = false;
-
-                    // Update Album
-                    updateGallery(file);
-
-                    // Show picture
-                    showImage(data);
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } finally {
-                    ltag("saveToDisk after takePhoto(): " + saveToDisk);
-                    image.close();
-                }
-            } else {
-                // Show picture
-                showImage(data);
-            }
-        }, mainHandler);
-
-        openCamera2View(presenter.getPermissions());
-    }
-
-    private void showImage(byte[] data) {
-        final Bitmap bitmap = BitmapFactory
-                .decodeByteArray(data, 0, data.length);
-        if (bitmap != null) {
-            presenter.setImage(bitmap);
-        }
     }
 
     /**
@@ -195,7 +107,7 @@ public class CameraUtil {
         }
     };
 
-    private void openCamera2View(RxPermissions rxPermissions) {
+    public void openCamera(RxPermissions rxPermissions) {
         // get manager
         CameraManager mCameraManager =
                 (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
@@ -249,15 +161,18 @@ public class CameraUtil {
             };
 
     private void takePreview() {
+        SurfaceTexture mSurfaceTexture = presenter.getSurfaceTexture();
+        mSurfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+        Surface previewSurface = new Surface(mSurfaceTexture);
+
         try {
             // CaptureRequest.Builder
             previewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             // surface of SurfaceView will be the object of CaptureRequest.Builder
-            previewRequestBuilder.addTarget(mSurfaceHolder.getSurface());
+            previewRequestBuilder.addTarget(previewSurface);
             // Create CameraCaptureSession to take care of preview and photo shooting.
             mCameraDevice.createCaptureSession(
-                    Arrays.asList(mSurfaceHolder.getSurface(),
-                            mImageReader.getSurface()),
+                    Arrays.asList(previewSurface, mImageReader.getSurface()),
                     previewStateCallback,
                     childHandler);
         } catch (CameraAccessException e) {
@@ -306,5 +221,128 @@ public class CameraUtil {
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+    }
+
+
+    private Size mPreviewSize;
+    private Size mCaptureSize;
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    public void setupCamera(int width, int height) {
+        this.context = presenter.getContext();
+
+        HandlerThread handlerThread = new HandlerThread("Camera2");
+        handlerThread.start();
+        childHandler = new Handler(handlerThread.getLooper());
+        // UI thread
+        mainHandler = new Handler(getMainLooper());
+
+        // CameraManager
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        try {
+            // search all cameras
+            for (String cameraId : manager.getCameraIdList()) {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                // camera behind screen
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT)
+                    continue;
+                // StreamConfigurationMap: manage format and size
+                StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                assert map != null;
+                // set preview size by TextureView size
+                mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
+                // get max size of camera
+                mCaptureSize = Collections.max(Arrays.asList(
+                        map.getOutputSizes(ImageFormat.JPEG)), (lhs, rhs) ->
+                            Long.signum(lhs.getWidth() * lhs.getHeight() -
+                                          rhs.getHeight() * rhs.getWidth()));
+                // ImageReader: take picture and preview
+                setupImageReader();
+                mCameraID = cameraId;
+                break;
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void setupImageReader() {
+        mImageReader = ImageReader.newInstance(mCaptureSize.getWidth(), mCaptureSize.getHeight(),
+                ImageFormat.JPEG, 1);
+        // Process temporary photo data
+        mImageReader.setOnImageAvailableListener(reader -> {
+            // Get photo data
+            Image image = reader.acquireNextImage();
+            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+            byte[] data = new byte[buffer.remaining()];
+            buffer.get(data);
+
+            ltag("saveToDisk: " + saveToDisk);
+
+            if (saveToDisk) {
+                saveImage(data, image);
+            } else {
+                // Show picture
+                showImage(data);
+            }
+        }, mainHandler);
+    }
+
+    private void saveImage(byte[] data, Image image) {
+        String captureTime = String.valueOf(System.currentTimeMillis());
+        String pictureName = "SV_" + captureTime + ".jpg";
+        File file = new File(album.getAlbumPath(), pictureName);
+        try {
+            // Local storage
+            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            fileOutputStream.write(data);
+            fileOutputStream.close();
+            ltag("Picture created: " + pictureName);
+
+            // Reset
+            saveToDisk = false;
+
+            // Update Album
+            updateGallery(file);
+
+            // Show picture
+            showImage(data);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            ltag("saveToDisk after takePhoto(): " + saveToDisk);
+            image.close();
+        }
+    }
+
+    private void showImage(byte[] data) {
+        final Bitmap bitmap = BitmapFactory
+                .decodeByteArray(data, 0, data.length);
+        if (bitmap != null) {
+            presenter.setImage(bitmap);
+        }
+    }
+
+    // sizeMap: get nearest size of width and height
+    private Size getOptimalSize(Size[] sizeMap, int width, int height) {
+        List<Size> sizeList = new ArrayList<>();
+        for (Size option : sizeMap) {
+            if (width > height) {
+                if (option.getWidth() > width && option.getHeight() > height) {
+                    sizeList.add(option);
+                }
+            } else {
+                if (option.getWidth() > height && option.getHeight() > width) {
+                    sizeList.add(option);
+                }
+            }
+        }
+        if (sizeList.size() > 0) {
+            return Collections.min(sizeList, (lhs, rhs) ->
+                    Long.signum(lhs.getWidth() * lhs.getHeight() -
+                            rhs.getWidth() * rhs.getHeight()));
+        }
+        return sizeMap[0];
     }
 }
