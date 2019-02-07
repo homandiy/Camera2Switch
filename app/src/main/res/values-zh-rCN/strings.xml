@@ -5,4 +5,9 @@
     <string name="key_language">language</string>
     <string name="album_name">camera2_album</string>
     <string name="info_default">我站在 SurfaceView 前面。</string>
+    <string name="zero">0.00</string>
+    <string name="rotation_vector_4">旋转矢量 4:</string>
+    <string name="rotation_vector_3">旋转矢量 3:</string>
+    <string name="rotation_vector_2">旋转矢量 2:</string>
+    <string name="rotation_vector_1">旋转矢量 1:</string>
 </resources>
