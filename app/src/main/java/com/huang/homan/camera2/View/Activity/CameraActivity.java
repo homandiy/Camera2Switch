@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
@@ -41,21 +42,20 @@ public class CameraActivity extends AppCompatActivity
         Toast.makeText(context, message, Toast.LENGTH_LONG).show();
     }
 
-    // Screen rotation
-    private boolean portraitScreen = true;
+    // Fragment
+    @BindView(R.id.camera_container)
+    FrameLayout cameraContainer;
 
+    FragmentManager fragmentManager;
+    FragmentTransaction ft;
+    CameraFragmentPresenter cameraFragmentPresenter;
+
+    /*
     // Action bar
     @BindView(R.id.appbar)
     Toolbar appbar;
     @BindView(R.id.includeBar)
     View includeBar;
-
-    // Fragment
-    @BindView(R.id.camera_container)
-    FrameLayout cameraContainer;
-    FragmentManager fragmentManager;
-    FragmentTransaction ft;
-    CameraFragmentPresenter cameraFragmentPresenter;
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -66,7 +66,7 @@ public class CameraActivity extends AppCompatActivity
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+        switch_camera (item.getItemId()) {
             case R.id.rotation:
                 //your action
                 if (portraitScreen) {
@@ -85,6 +85,10 @@ public class CameraActivity extends AppCompatActivity
         }
         return true;
     }
+    */
+
+    public int frameHeight;
+    public int frameWidth;
 
     @SuppressLint("CheckResult")
     @Override
@@ -94,8 +98,8 @@ public class CameraActivity extends AppCompatActivity
         ButterKnife.bind(this);
 
         // App Bar: Language Menu
-        setSupportActionBar(appbar);
-        appbar.inflateMenu(R.menu.appbar_menu);
+        //setSupportActionBar(appbar);
+        //appbar.inflateMenu(R.menu.appbar_menu);
 
         // Fragment
         fragmentManager = getSupportFragmentManager();

@@ -7,12 +7,6 @@
     android:layout_height="match_parent"
     tools:context=".View.Activity.CameraActivity">
 
-    <include
-        layout="@layout/appbar"
-        android:id="@+id/includeBar"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"/>
-
     <FrameLayout
         android:id="@+id/camera_container"
         android:layout_width="0dp"
@@ -22,6 +16,8 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/includeBar" />
+        app:layout_constraintTop_toTopOf="parent">
+
+    </FrameLayout>
 
 </android.support.constraint.ConstraintLayout>

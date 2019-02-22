@@ -10,4 +10,10 @@
     <string name="rotation_vector_3">旋转矢量 3:</string>
     <string name="rotation_vector_2">旋转矢量 2:</string>
     <string name="rotation_vector_1">旋转矢量 1:</string>
+    <string name="a_m_title">加速 和 磁场 感应器</string>
+    <string name="azimuth">东南西北</string>
+    <string name="pitch">上下</string>
+    <string name="roll">左右</string>
+    <string name="float_format">%1$.2f</string>
+    <string name="error_matrix">错误</string>
 </resources>

@@ -153,10 +153,6 @@ public class CameraFragmentPresenter
     }
 
 
-    public void openCamera(RxPermissions rxPermissions) {
-        cameraUtil.openCamera(rxPermissions);
-    }
-
     public SurfaceTexture getSurfaceTexture() {
         return cameraFragment.getmTextureView().getSurfaceTexture();
     }
@@ -173,4 +169,49 @@ public class CameraFragmentPresenter
     public void releaseSound() {
         soundManager.release();
     }
+
+    public void getDefaultCamera(int width, int height) {
+        cameraUtil.getCameraId(width, height);
+    }
+
+    public void setupThread() {
+        cameraUtil.loadThread();
+    }
+
+    public void closeCamera() {
+        cameraUtil.closeCamera();
+    }
+
+    public void stopBackgroundThread() {
+        cameraUtil.stopBackgroundThread();
+    }
+
+    public void switchCamera() {
+        cameraUtil.switchCamera();
+    }
+
+    public void playSoundSwitchCamera() {
+        soundManager.playSwitch();
+    }
+
+    public boolean checkTextureViewAvailable() {
+        return cameraFragment.getTextureViewAvailable();
+    }
+
+    public void setPermission(boolean granted) {
+        cameraUtil.setPermission(granted);
+    }
+
+    public void setTextureListener() {
+        cameraFragment.setTextureListener();
+    }
+
+    public int getCameraQuanity() {
+        return cameraUtil.getCameraQuanity();
+    }
+
+    public void openCamera() {
+        cameraUtil.reopenCamera();
+    }
+
 }

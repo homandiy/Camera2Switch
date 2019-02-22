@@ -9,4 +9,10 @@
     <string name="rotation_vector_3">Rotation Vector 3:</string>
     <string name="rotation_vector_2">Rotation Vector 2:</string>
     <string name="rotation_vector_1">Rotation Vector 1:</string>
+    <string name="a_m_title">Accelerometer Sensor\nMagnetometer Sensor</string>
+    <string name="azimuth">Azimuth(N/S/E/W)</string>
+    <string name="pitch">Pitch(up/down)</string>
+    <string name="roll">Roll(left/right)</string>
+    <string name="float_format">%1$.2f</string>
+    <string name="error_matrix">error</string>
 </resources>

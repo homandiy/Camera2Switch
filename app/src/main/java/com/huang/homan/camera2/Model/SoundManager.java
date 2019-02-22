@@ -22,6 +22,7 @@ public class SoundManager {
     // Sound players
     MediaPlayer shutterPlay;
     MediaPlayer shutter2Play;
+    MediaPlayer switchPlay;
 
     private static SoundManager instance;
 
@@ -38,6 +39,8 @@ public class SoundManager {
         shutterPlay.setVolume(maxVolume, maxVolume);
         shutter2Play = MediaPlayer.create(context, R.raw.shutter2);
         shutter2Play.setVolume(maxVolume, maxVolume);
+        switchPlay = MediaPlayer.create(context, R.raw.switch_camera);
+        switchPlay.setVolume(maxVolume, maxVolume);
     }
 
     public static SoundManager getInstance(Context context) {
@@ -59,6 +62,10 @@ public class SoundManager {
 
     public void playShutter2() {
         playSound(shutter2Play);
+    }
+
+    public void playSwitch() {
+        playSound(switchPlay);
     }
 
     public void release() {

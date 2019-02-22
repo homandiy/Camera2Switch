@@ -1,5 +1,6 @@
 package com.huang.homan.camera2.Model;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -7,6 +8,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -23,6 +25,7 @@ import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.ActivityCompat;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -53,11 +56,21 @@ public class CameraUtil {
     public static void ltag(String message) { Log.i(TAG, message); }
 
     // Variables
+    // Thread and Handlers
     private Handler childHandler, mainHandler;
-    private String mCameraID; // 0: rear camera; 1: front camera
+    private HandlerThread mBackgroundThread;
+
+    // Permission
+    private boolean permissionGranted = false;
+    public void setPermission(boolean permissionGranted) {
+        this.permissionGranted = permissionGranted;
+    }
+
+    private String mCameraId; // 0: rear camera; 1: front camera
     private ImageReader mImageReader;
     private CameraCaptureSession mCameraCaptureSession;
     private CameraDevice mCameraDevice;
+    private CameraManager mCameraManager;
 
     private Context context;
     private boolean saveToDisk = false;
@@ -107,18 +120,12 @@ public class CameraUtil {
         }
     };
 
-    public void openCamera(RxPermissions rxPermissions) {
-        // get manager
-        CameraManager mCameraManager =
-                (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+
+    @SuppressLint("MissingPermission")
+    public void openCamera() {
         try {
-            if (ActivityCompat.checkSelfPermission(context, CAMERA) !=
-                    PackageManager.PERMISSION_GRANTED) {
-                // Get WRITE_EXTERNAL_STORAGE
-                rxPermissions.ensureEach(WRITE_EXTERNAL_STORAGE);
-            } else {
-                // Open camera
-                mCameraManager.openCamera(mCameraID, stateCallback, mainHandler);
+            if (permissionGranted) {
+                mCameraManager.openCamera(mCameraId, stateCallback, mainHandler);
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -226,44 +233,107 @@ public class CameraUtil {
 
     private Size mPreviewSize;
     private Size mCaptureSize;
+
+    private static final String CAMERA_FONT = "0";
+    private static final String CAMERA_BACK = "1";
+
+    public void loadThread() {
+        if (mBackgroundThread == null) {
+            mBackgroundThread = new HandlerThread("Camera2");
+            mBackgroundThread.start();
+            childHandler = new Handler(mBackgroundThread.getLooper());
+            // UI thread
+            mainHandler = new Handler(getMainLooper());
+        }
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void setupCamera(int width, int height) {
-        this.context = presenter.getContext();
-
-        HandlerThread handlerThread = new HandlerThread("Camera2");
-        handlerThread.start();
-        childHandler = new Handler(handlerThread.getLooper());
-        // UI thread
-        mainHandler = new Handler(getMainLooper());
-
-        // CameraManager
-        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        ltag("Setup camera: x = "+width+"    , y = "+height);
         try {
-            // search all cameras
-            for (String cameraId : manager.getCameraIdList()) {
-                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
-                // camera behind screen
-                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT)
-                    continue;
-                // StreamConfigurationMap: manage format and size
-                StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                assert map != null;
-                // set preview size by TextureView size
-                mPreviewSize = getOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
-                // get max size of camera
-                mCaptureSize = Collections.max(Arrays.asList(
-                        map.getOutputSizes(ImageFormat.JPEG)), (lhs, rhs) ->
-                            Long.signum(lhs.getWidth() * lhs.getHeight() -
-                                          rhs.getHeight() * rhs.getWidth()));
-                // ImageReader: take picture and preview
-                setupImageReader();
-                mCameraID = cameraId;
-                break;
+            assert mCameraId != null;
+            CameraCharacteristics characteristics =
+                    mCameraManager.getCameraCharacteristics(mCameraId);
+            // StreamConfigurationMap: manage format and size
+            StreamConfigurationMap map = characteristics.get(
+                    CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            // set preview size by TextureView size
+            mPreviewSize = getOptimalSize(
+                    map.getOutputSizes(SurfaceTexture.class),
+                    width,
+                    height);
+
+            // get max size of camera
+            mCaptureSize = Collections.max(Arrays.asList(
+                    map.getOutputSizes(ImageFormat.JPEG)), (lhs, rhs) ->
+                    Long.signum(lhs.getWidth() * lhs.getHeight() -
+                            rhs.getHeight() * rhs.getWidth()));
+            // ImageReader: take picture and preview
+            setupImageReader();
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void switchCamera() {
+        if (TextUtils.equals(mCameraId, CAMERA_FONT)) {
+            mCameraId = CAMERA_BACK;
+        } else {
+            mCameraId = CAMERA_FONT;
+        }
+        closeCamera();
+        reopenCamera();
+    }
+
+    public void closeCamera() {
+        if (null != mCameraCaptureSession) {
+            mCameraCaptureSession.close();
+            mCameraCaptureSession = null;
+        }
+
+        if (null != mCameraDevice) {
+            mCameraDevice.close();
+            mCameraDevice = null;
+        }
+
+        if (null != mImageReader) {
+            mImageReader.close();
+            mImageReader = null;
+        }
+    }
+
+
+    /* check camera: if we have two cameras, return the front
+              else return anything for one camera
+         */
+    private int cameraQuanity = 0;
+    public int getCameraQuanity() { return cameraQuanity; }
+    private int textureHeight;
+    private int textureWidth;
+    public String getCameraId(int width, int height) {
+        context = presenter.getContext();
+        textureWidth = width;
+        textureHeight = height;
+
+        mCameraManager = (CameraManager)
+                context.getSystemService(Context.CAMERA_SERVICE);
+        try {
+            String[] cameraList = mCameraManager.getCameraIdList();
+            cameraQuanity = cameraList.length;
+            for (int i = 0; i < cameraQuanity; i++) {
+                String cameraId = cameraList[i];
+                if (TextUtils.equals(cameraId, CAMERA_FONT)) {
+                    mCameraId = cameraId;
+                    break;
+                } else if (TextUtils.equals(cameraId, CAMERA_BACK)) {
+                    mCameraId = cameraId;
+                    break;
+                }
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+        return null;
     }
 
     private void setupImageReader() {
@@ -344,5 +414,26 @@ public class CameraUtil {
                             rhs.getWidth() * rhs.getHeight()));
         }
         return sizeMap[0];
+    }
+
+    public void stopBackgroundThread() {
+        mBackgroundThread.quitSafely();
+        try {
+            mBackgroundThread.join();
+            mBackgroundThread = null;
+            mainHandler = null;
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void reopenCamera() {
+        ltag("Reopen Camera");
+        setupCamera(textureWidth, textureHeight);
+        if (presenter.checkTextureViewAvailable()) {
+            openCamera();
+        } else {
+            presenter.setTextureListener();
+        }
     }
 }

@@ -24,6 +24,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -77,6 +78,9 @@ public class CameraFragment extends BaseFragment
         Toast.makeText(context, message, Toast.LENGTH_LONG).show();
     }
 
+    // user permission
+    private boolean permissionGranted = false;
+
     // UI Variables
     //region implements TextureView related
     @BindView(R.id.mTextureView)
@@ -89,12 +93,24 @@ public class CameraFragment extends BaseFragment
         return mTextureView;
     }
 
+    /**
+     * If quanity of camera < 2, hide switch button
+     */
+    private void checkCameraQuanity() {
+        if (presenter.getCameraQuanity() < 2) {
+            switchIV.setVisibility(View.GONE);
+        }
+    }
+
     private TextureView.SurfaceTextureListener mTextureListener =
             new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+            presenter.getDefaultCamera(width, height); //get default camera ID
+            checkCameraQuanity();
+            presenter.setupThread();
             presenter.setupCamera(width, height);
-            presenter.openCamera(rxPermissions);
+            presenter.openCamera();
         }
 
         @Override
@@ -120,15 +136,11 @@ public class CameraFragment extends BaseFragment
         return mTextureView;
     }
 
-    // Layout measurement variables
-    @BindView(R.id.cameraCL)
-    ConstraintLayout cameraCL;
-    private int height;
-    private int width;
-    private int offset;
-
     @BindView(R.id.infoTV)
     TextView infoTV;
+
+    @BindView(R.id.cameraCL)
+    ConstraintLayout cameraCL;
 
     @BindView(R.id.iv_show)
     ImageView iv_show;
@@ -137,20 +149,47 @@ public class CameraFragment extends BaseFragment
         iv_show.setImageBitmap(bitmap);
     }
 
+    //region implements Control Panel variables
+    private int offsetX;
+    private int offsetY;
+
+    @BindView(R.id.crossDotIV)
+    ImageView crossDotIV;
+
+    @BindView(R.id.controlLV)
+    LinearLayout controlLV;
+
+    // Control Panel data
+    private int controlHeight;
+    private int controlWidth;
+    // Control Panel position
+    private position cpPosition = position.BottomRight;
+
+    // Capture button
     @BindView(R.id.captureIV)
     ImageView captureIV;
-    private int capButHeight;
-    private int capButWidth;
-    private position capPosition = position.BottomRight;
 
     @OnClick(R.id.captureIV)
-    public void onViewClicked() {
+    public void captureImageClicked() {
         ltag("Capture Button Clicked.");
 
         presenter.playShutter();
-        presenter.playShutter2();
+        //presenter.playShutter2();
         //presenter.capturePhoto(getRotation());
     }
+
+    // Switch camera button
+    @BindView(R.id.switchIV)
+    ImageView switchIV;
+
+    @OnClick(R.id.switchIV)
+    public void switchCameraClicked() {
+        ltag("Switch Button Clicked.");
+
+        presenter.playSoundSwitchCamera();
+        presenter.switchCamera();
+    }
+    //endregion implements
 
     // Rotation Sensor variables
     @BindView(R.id.rvInclude)
@@ -230,13 +269,19 @@ public class CameraFragment extends BaseFragment
                     if (granted) { // Always true pre-M
                         msg(getContext(), "Permissions granted!");
                         ltag("Permissions granted!");
+
+                        setupSensors();
+                        permissionGranted = true;
+
                     } else {
                         // Oops permission denied
                         msg(getContext(), "You don't have the permission!");
                         ltag("You don't have the permission!");
                     }
                 });
+    }
 
+    private void setupSensors() {
         try {
             mSensorManager = (SensorManager) getActivity().getSystemService(SENSOR_SERVICE);
             mRotationSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
@@ -257,18 +302,23 @@ public class CameraFragment extends BaseFragment
     public void onResume() {
         super.onResume();
         ltag("onResume()");
-        if (height > 0) {
+        presenter.setupThread();
+        if (cameraCL.getWidth() > 0) {
             registerSensors();
+            presenter.openCamera();
             // Reset button position
-            captureIV.setX((float) ButtonMap.get(position.BottomRight).getX());
-            captureIV.setY((float) ButtonMap.get(position.BottomRight).getY());
+            captureIV.setX((float) LayoutLocationMap.get(position.BottomRight).getX());
+            captureIV.setY((float) LayoutLocationMap.get(position.BottomRight).getY());
         }
+
     }
 
     @Override
     public void onPause() {
         super.onPause();
         mSensorManager.unregisterListener(this);
+        presenter.closeCamera();
+        presenter.stopBackgroundThread();
     }
 
     private void registerSensors() {
@@ -302,6 +352,8 @@ public class CameraFragment extends BaseFragment
         View view = inflater.inflate(R.layout.fragment_camera, container, false);
         unbinder = ButterKnife.bind(this, view);
 
+        if (presenter != null) presenter.setPermission(permissionGranted);
+
         // Get fragment measurement
         ViewTreeObserver vto = cameraCL.getViewTreeObserver();
         vto.addOnGlobalLayoutListener (
@@ -310,25 +362,31 @@ public class CameraFragment extends BaseFragment
             public void onGlobalLayout() {
                 cameraCL.getViewTreeObserver()
                         .removeOnGlobalLayoutListener(this);
-                height  = cameraCL.getMeasuredWidth();
-                width = cameraCL.getMeasuredHeight();
+                int height = cameraCL.getMeasuredWidth();
+                int width = cameraCL.getMeasuredHeight();
 
                 ltag("fragment ~ h: "+height+"    w: "+width);
 
-                capButHeight = captureIV.getHeight();
-                capButWidth = captureIV.getWidth();
+                controlHeight = controlLV.getHeight();
+                controlWidth = controlLV.getWidth();
 
-                ltag("capture button ~ h: "+capButHeight+"    w: "+capButWidth);
+                ltag("capture bar ~ h: "+controlHeight+"    w: "+controlWidth);
                 int location[] = new int[2];
-                captureIV.getLocationOnScreen(location);
+                controlLV.getLocationOnScreen(location);
 
-                int offset1 = height - location[0];
-                int offset2 = width - location[1];
-                offset = offset1;
-                ltag("capture button ~ x: "+location[0]+", offsetX: "+offset1+"."+
-                                  "    y: "+location[1]+", offsetY: "+offset2+".");
+                offsetX = height - location[0] - controlWidth;
+                ltag("offsetX: height("+height+") - location0("+location[0]+") " +
+                        "- controlW("+controlWidth+") = "+offsetX);
+                offsetY = width - location[1] - controlHeight;
+                ltag("offsetY: width("+width+") - location1("+location[1]+") " +
+                        "- controlH("+controlHeight+") = "+offsetY);
 
-                createButtonMap(height, width, capButHeight, capButWidth);
+                //location checker
+                crossDotIV.setVisibility(View.VISIBLE);
+                crossDotIV.setX(location[0]-20);
+                crossDotIV.setY(location[1]-20);
+
+                createPanelLocationMap(height, width, controlHeight, controlWidth);
 
                 registerSensors();
             }
@@ -337,52 +395,13 @@ public class CameraFragment extends BaseFragment
         return view;
     }
 
-    public enum position {
-        TopLeft, TopRight, BottomLeft, BottomRight
-    }
-
-    private class ButtonLocation{
-        private int x;
-        private int y;
-
-        public ButtonLocation(int x, int y) {
-            this.x = x;
-            this.y = y;
-        }
-
-        public int getX() {
-            return x;
-        }
-
-        public int getY() {
-            return y;
-        }
-
-        public String toString() {
-            return "x: "+x+",  y: "+y;
-        }
-    }
-
-    private Map<position, ButtonLocation> ButtonMap = new HashMap<>();
-
-    private void createButtonMap(int x, int y, int cbx, int cby) {
-        int gap = offset - cbx;
-        // set top left position
-        ButtonMap.put(position.TopLeft, new ButtonLocation(gap, gap));
-        // set top right position
-        ButtonMap.put(position.TopRight, new ButtonLocation((x-offset), gap));
-        // set bottom left position
-        ButtonMap.put(position.BottomLeft, new ButtonLocation(gap, (y-offset)));
-        // set top right position
-        ButtonMap.put(position.BottomRight, new ButtonLocation((x-offset), (y-offset)));
-    }
 
     @Override
     public void onViewCreated(@android.support.annotation.NonNull View view,
                               @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        mTextureView.setSurfaceTextureListener(mTextureListener);
+        setTextureListener();
 
         presenter.setFragment(this);
 
@@ -438,15 +457,74 @@ public class CameraFragment extends BaseFragment
         unbinder.unbind();
     }
 
-    //region implements Sensor Implementation 
+    public boolean getTextureViewAvailable() {
+        return mTextureView.isAvailable();
+    }
+
+    public void setTextureListener() {
+        mTextureView.setSurfaceTextureListener(mTextureListener);
+    }
+
+    //region implements Sensor Implementation
+    //region implements Layout Location Map
+    public enum position {
+        TopLeft, TopRight, BottomLeft, BottomRight
+    }
+
+    private class LayoutLocation{
+        private int x;
+        private int y;
+
+        public LayoutLocation(int x, int y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        public int getX() {
+            return x;
+        }
+
+        public int getY() {
+            return y;
+        }
+
+        public String toString() {
+            return "x: "+x+",  y: "+y;
+        }
+    }
+
+    private Map<position, LayoutLocation> LayoutLocationMap = new HashMap<>();
+
+    /**
+     * Map Control Panel Location after rotation
+     * phone example: offsetX=32 offsetY=16
+     * @param x screen width,               phone example: 720
+     * @param y screen height,              phone example: 1280
+     * @param cpx control panel width       phone example: 320
+     * @param cpy control panel height      phone example: 160
+     */
+    private void createPanelLocationMap(int x, int y, int cpy, int cpx) {
+        // set top left position
+        LayoutLocationMap.put(position.TopLeft,
+                new LayoutLocation(offsetX+cpx, offsetY+cpy));
+        // set top right position
+        LayoutLocationMap.put(position.TopRight,
+                new LayoutLocation(x-offsetY-cpy, offsetX+cpx));
+        // set bottom left position
+        LayoutLocationMap.put(position.BottomLeft,
+                new LayoutLocation(offsetX+cpy, y-offsetY-cpx));
+        // set top right position
+        LayoutLocationMap.put(position.BottomRight,
+                new LayoutLocation(x-offsetX-cpx, y-offsetY-cpy));
+    }
+    //endregion implements
+
     /**
      * Sensors change
      */
     private float[] mAccelerometerData = new float[3];
     private float[] mMagnetometerData = new float[3];
-    private int angel = 0;
-    private position butPosition;
-
+    private float[] mVectors  = new float[9];
     @SuppressLint("DefaultLocale")
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
@@ -462,15 +540,15 @@ public class CameraFragment extends BaseFragment
                 break;
 
             case Sensor.TYPE_ROTATION_VECTOR:
-                float[] mRotationVectors = sensorEvent.values.clone();
+                mVectors = sensorEvent.values.clone();
                 rvData1.setText(getResources().getString(
-                        R.string.float_format, mRotationVectors[0]));
+                        R.string.float_format, mVectors[0]));
                 rvData2.setText(getResources().getString(
-                        R.string.float_format, mRotationVectors[1]));
+                        R.string.float_format, mVectors[1]));
                 rvData3.setText(getResources().getString(
-                        R.string.float_format, mRotationVectors[2]));
+                        R.string.float_format, mVectors[2]));
                 rvData4.setText(getResources().getString(
-                        R.string.float_format, mRotationVectors[3]));
+                        R.string.float_format, mVectors[3]));
                 break;
 
             default:
@@ -492,7 +570,7 @@ public class CameraFragment extends BaseFragment
             rollData.setText(getResources().getString(
                     R.string.float_format, roll));
 
-            moveCaptureButton(pitch, roll);
+            moveControlBar(pitch, roll, mVectors[0], mVectors[2]);
         } else {
             // update tilt data with error
             azimuthData.setText(getResources().getString(
@@ -510,57 +588,71 @@ public class CameraFragment extends BaseFragment
      * Portrait upside down: top left and rotate 180
      * Landscape left upside: top right and rotate 90
      * Landscape right upside: bottom left and rotate 270
-     * @param pitch
-     * @param roll
+     * @param pitch up/down
+     * @param roll left/right
      */
-    private void moveCaptureButton(float pitch, float roll) {
+    private void moveControlBar(float pitch, float roll, float v1, float v3) {
 
-        position newPos = getPosition(pitch, roll);
+        position newPos = getPosition(pitch, roll, v1, v3);
 
-        if (newPos != capPosition) {
-            ltag("Old Pos: "+capPosition.name()+"    --   New Pos: "+newPos.name());
+        if (newPos != cpPosition) {
+            ltag("Old Pos: "+cpPosition.name()+"    --   New Pos: "+newPos.name());
+            int location[] = new int[2];
 
+            controlLV.getLocationOnScreen(location);
+            ltag("Before:  x: "+location[0]+"  y: "+location[1]);
 
-            ButtonLocation oldBL = ButtonMap.get(capPosition);
-            ButtonLocation newBL = ButtonMap.get(newPos);
+            // Setup the pivot point
+            controlLV.setPivotX(0);
+            controlLV.setPivotY(0);
+
+            switch (newPos) {
+                case TopLeft:
+                    controlLV.setRotation(180);
+                    break;
+                case TopRight:
+                    controlLV.setRotation(-90);
+                    break;
+                case BottomLeft:
+
+                    controlLV.setRotation(90);
+                    break;
+                case BottomRight:
+                    controlLV.setRotation(0);
+                    break;
+            }
+
+            LayoutLocation oldBL = LayoutLocationMap.get(cpPosition);
+            LayoutLocation newBL = LayoutLocationMap.get(newPos);
             ltag("Old Location: "+oldBL.toString()+".  New Location: "+newBL.toString());
 
-            capPosition = newPos;
-            captureIV.setX((float) ButtonMap.get(newPos).getX());
-            captureIV.setY((float) ButtonMap.get(newPos).getY());
+            // set new position
+            cpPosition = newPos;
+            controlLV.setX((float) LayoutLocationMap.get(newPos).getX());
+            controlLV.setY((float) LayoutLocationMap.get(newPos).getY());
+            controlLV.getLocationOnScreen(location);
+            ltag("After:  x: "+location[0]+"  y: "+location[1]);
 
-            int location[] = new int[2];
-            captureIV.getLocationOnScreen(location);
-            ltag("Capture Button:  x: "+location[0]+"  y: "+location[1]);
+            // test X to provide location in runtime
+            crossDotIV.setX((float) LayoutLocationMap.get(newPos).getX()-20);
+            crossDotIV.setY((float) LayoutLocationMap.get(newPos).getY()-20);
 
-            captureIV.setRotation(0);
-            switch (newPos) {
-                case TopLeft: captureIV.setRotation(180); break;
-                case TopRight:  captureIV.setRotation(-90); break;
-                case BottomLeft:  captureIV.setRotation(90); break;
-            }
         }
     }
 
-    private position getPosition(float pitch, float roll) {
-        boolean landscape = true;
-        if (roll > -1.3f && roll < 1.3f) {
-            landscape = false;
-        }
-
-        if (landscape) {
-            if (roll > 0) {
+    private position getPosition(float pitch, float roll, float v1, float v3) {
+        boolean landscape = false;
+        if (pitch > -0.5f && pitch < 0.5f) {
+            if (roll < 0)
+                return position.BottomLeft;
+            else
                 return position.TopRight;
-            }
-            return position.BottomLeft;
-
-        } else {
-            // portrait: straight up
-            if (pitch < 0) {
-                return position.BottomRight;
-            }
-            return position.TopLeft;
         }
+
+        if (v3 > 0)
+             return position.BottomRight;
+        else
+            return position.TopLeft;
     }
 
 
